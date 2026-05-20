@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Memory Match Game</title>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body{
+    background:linear-gradient(135deg,#0f172a,#1e293b);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:10px;
+    color:white;
+}
+
+.game-container{
+    width:100%;
+    max-width:380px;
+    text-align:center;
+}
+
+h1{
+    font-size:1.8rem;
+    margin-bottom:12px;
+}
+
+.stats{
+    display:flex;
+    justify-content:space-between;
+    background:#111827;
+    padding:10px 14px;
+    border-radius:12px;
+    margin-bottom:12px;
+    font-size:15px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:8px;
+}
+
+.card{
+    width:100%;
+    aspect-ratio:1/1;
+    perspective:800px;
+    cursor:pointer;
+}
+
+.inner-card{
+    width:100%;
+    height:100%;
+    position:relative;
+    transform-style:preserve-3d;
+    transition:transform .4s;
+}
+
+.card.flip .inner-card{
+    transform:rotateY(180deg);
+}
+
+.front,
+.back{
+    position:absolute;
+    width:100%;
+    height:100%;
+    border-radius:10px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:1.4rem;
+    backface-visibility:hidden;
+}
+
+.front{
+    background:#38bdf8;
+    color:white;
+}
+
+.back{
+    background:white;
+    color:black;
+    transform:rotateY(180deg);
+}
+
+button{
+    margin-top:14px;
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    background:#22c55e;
+    color:white;
+    font-size:15px;
+    cursor:pointer;
+}
+
+button:active{
+    transform:scale(.97);
+}
+
+/* POPUP */
+
+.popup{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,.7);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    visibility:hidden;
+    opacity:0;
+    transition:.3s;
+    padding:20px;
+}
+
+.popup.show{
+    visibility:visible;
+    opacity:1;
+}
+
+.popup-box{
+    background:white;
+    color:black;
+    padding:25px;
+    border-radius:18px;
+    text-align:center;
+    width:100%;
+    max-width:300px;
+    animation:pop .4s ease;
+}
+
+.popup-box h2{
+    margin-bottom:10px;
+    font-size:2rem;
+}
+
+.popup-box p{
+    margin-bottom:15px;
+    font-size:17px;
+}
+
+@keyframes pop{
+    from{
+        transform:scale(.5);
+        opacity:0;
+    }
+    to{
+        transform:scale(1);
+        opacity:1;
+    }
+}
+
+@media(max-width:400px){
+
+    .grid{
+        gap:6px;
+    }
+
+    .front,
+    .back{
+        font-size:1.2rem;
+    }
+
+    h1{
+        font-size:1.5rem;
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="game-container">
+
+    <h1>🧠 Memory Game</h1>
+<h2> Developer - Durgesh Kaiwart</h2>
+
+    <div class="stats">
+        <div>Moves: <span id="moves">0</span></div>
+        <div>Match: <span id="matches">0</span></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <button onclick="restartGame()">🔄 Restart Game</button>
+
+</div>
+
+<!-- WIN POPUP -->
+
+<div class="popup" id="popup">
+    <div class="popup-box">
+        <h2>🎉 YOU WIN!</h2>
+        <p id="winText"></p>
+        <button onclick="restartGame()">Play Again</button>
+    </div>
+</div>
+
+<script>
+
+/* EMOJIS */
+
+const emojis = ['🍎','🍌','🍇','🍒','🥝','🍉','🍍','🥥'];
+
+let cardsArray = [...emojis,...emojis];
+
+let firstCard = null;
+let secondCard = null;
+let lockBoard = false;
+
+let moves = 0;
+let matches = 0;
+
+/* ELEMENTS */
+
+const grid = document.getElementById('grid');
+const movesText = document.getElementById('moves');
+const matchesText = document.getElementById('matches');
+
+const popup = document.getElementById('popup');
+const winText = document.getElementById('winText');
+
+/* SOUNDS */
+
+const flipSound = new Audio(
+'https://assets.mixkit.co/active_storage/sfx/2005/2005-preview.mp3'
+);
+
+const matchSound = new Audio(
+'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'
+);
+
+const wrongSound = new Audio(
+'https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3'
+);
+
+const winSound = new Audio(
+'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3'
+);
+
+/* SHUFFLE */
+
+function shuffle(array){
+    array.sort(() => Math.random() - 0.5);
+}
+
+/* CREATE BOARD */
+
+function createBoard(){
+
+    grid.innerHTML = '';
+
+    shuffle(cardsArray);
+
+    cardsArray.forEach(emoji => {
+
+        const card = document.createElement('div');
+
+        card.classList.add('card');
+
+        card.dataset.emoji = emoji;
+
+        card.innerHTML = `
+            <div class="inner-card">
+                <div class="front">?</div>
+                <div class="back">${emoji}</div>
+            </div>
+        `;
+
+        card.addEventListener('click', flipCard);
+
+        grid.appendChild(card);
+    });
+}
+
+/* FLIP CARD */
+
+function flipCard(){
+
+    if(lockBoard) return;
+
+    if(this === firstCard) return;
+
+    flipSound.currentTime = 0;
+    flipSound.play();
+
+    this.classList.add('flip');
+
+    if(!firstCard){
+
+        firstCard = this;
+        return;
+    }
+
+    secondCard = this;
+
+    moves++;
+
+    movesText.innerText = moves;
+
+    checkMatch();
+}
+
+/* CHECK MATCH */
+
+function checkMatch(){
+
+    const isMatch =
+    firstCard.dataset.emoji === secondCard.dataset.emoji;
+
+    if(isMatch){
+
+        matchSound.currentTime = 0;
+        matchSound.play();
+
+        disableCards();
+
+    }else{
+
+        wrongSound.currentTime = 0;
+        wrongSound.play();
+
+        unflipCards();
+    }
+}
+
+/* MATCHED */
+
+function disableCards(){
+
+    firstCard.removeEventListener('click', flipCard);
+    secondCard.removeEventListener('click', flipCard);
+
+    matches++;
+
+    matchesText.innerText = matches;
+
+    resetBoard();
+
+    if(matches === emojis.length){
+
+        winSound.play();
+
+        setTimeout(() => {
+
+            winText.innerHTML =
+            `Completed in <b>${moves}</b> moves`;
+
+            popup.classList.add('show');
+
+        }, 500);
+    }
+}
+
+/* WRONG MATCH */
+
+function unflipCards(){
+
+    lockBoard = true;
+
+    setTimeout(() => {
+
+        firstCard.classList.remove('flip');
+        secondCard.classList.remove('flip');
+
+        resetBoard();
+
+    }, 700);
+}
+
+/* RESET */
+
+function resetBoard(){
+
+    firstCard = null;
+    secondCard = null;
+    lockBoard = false;
+}
+
+/* RESTART */
+
+function restartGame(){
+
+    popup.classList.remove('show');
+
+    moves = 0;
+    matches = 0;
+
+    movesText.innerText = moves;
+    matchesText.innerText = matches;
+
+    resetBoard();
+
+    createBoard();
+}
+
+/* START GAME */
+
+createBoard();
+
+</script>
+
+</body>
+</html>
